@@ -7,10 +7,12 @@ from typing import Dict
 
 
 @dataclass(frozen=True)
+# 역할: 환경변수를 코드에서 안전하게 다루기 위한 설정 데이터 구조다.
 class Settings:
     gemini_api_key: str
 
 
+# 역할: .env 파일을 읽어 KEY=VALUE 형태로 파싱한다.
 def _load_env_file(path: Path) -> Dict[str, str]:
     if not path.exists():
         return {}
@@ -26,6 +28,7 @@ def _load_env_file(path: Path) -> Dict[str, str]:
     return data
 
 
+# 역할: 실행에 필요한 설정값을 환경변수/파일에서 로드한다.
 def load_settings() -> Settings:
     env_path = Path(__file__).resolve().parents[1] / ".env"
     file_env = _load_env_file(env_path)

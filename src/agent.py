@@ -7,7 +7,6 @@ from .memory import add_qa, init_memory, set_slot
 from .question_bank import get_question
 from .scoring import (
     compute_scores,
-    is_end_intent,
     parse_freq,
     parse_past_response,
     parse_plan_level,
@@ -15,11 +14,12 @@ from .scoring import (
     parse_yes_no,
 )
 from .schemas import empty_turn
-from .sentiment_detector import detect_sentiment
+from .sentiment_detector import detect_current_ideation, detect_sentiment
 from .summarizer import build_final_one_liner, build_structured_fields, natural_summary_from_structured
 from .utils import normalize_text
 
 
+# 역할: 에이전트 런타임 상태를 초기화한다.
 def init_state() -> Dict[str, Any]:
     return {
         "mode": "START_WAIT",
@@ -32,14 +32,13 @@ def init_state() -> Dict[str, Any]:
     }
 
 
+# 역할: 첫 응답이 긍정 흐름인지 판별한다.
 def _is_positive_text(user_text: str) -> bool:
-    lower = user_text.lower()
-    if any(k in lower for k in ["좋았", "행복", "뿌듯", "기분 좋", "재밌", "만족"]):
-        return True
     sentiment = detect_sentiment(user_text)
     return sentiment.get("label") == "POSITIVE"
 
 
+# 역할: 위험 상태에 따른 외부 지원 리소스를 결정한다.
 def _escalation_for_state(risk_state: str) -> Dict[str, Any]:
     if risk_state == "S2":
         return {
@@ -63,6 +62,7 @@ def _escalation_for_state(risk_state: str) -> Dict[str, Any]:
     return {"필요": False, "유형": "none", "리소스": []}
 
 
+# 역할: ideation=NO일 때 사건 기반 마무리 메시지를 만든다.
 def _build_event_based_close_message(event_text: str) -> str:
     if event_text:
         return (
@@ -73,6 +73,7 @@ def _build_event_based_close_message(event_text: str) -> str:
     return "마음이 힘들었겠어. 오늘은 네 편이 되어줄 사람 한 명에게 짧게라도 연락해보자. 지금까지 잘 버텨줘서 고마워."
 
 
+# 역할: 종료 시 사용자에게 보여줄 최종 안내 문장을 만든다.
 def _build_final_user_message(structured_fields: Dict[str, Any]) -> str:
     lines: List[str] = [
         "여기까지 솔직하게 말해줘서 고마워. 네가 버티느라 얼마나 힘들었는지 느껴져.",
@@ -87,6 +88,7 @@ def _build_final_user_message(structured_fields: Dict[str, Any]) -> str:
     return " ".join(lines)
 
 
+# 역할: 현재 모드와 슬롯값으로 다음 모드/질문/종료 여부를 결정한다.
 def _route(mode: str, normalized_user_text: str, memory: Dict[str, Any]) -> Tuple[str, str, bool, str]:
     if mode == "START_WAIT":
         if _is_positive_text(normalized_user_text):
@@ -121,13 +123,28 @@ def _route(mode: str, normalized_user_text: str, memory: Dict[str, Any]) -> Tupl
     return "END", "", True, "resolved"
 
 
+# 역할: 현재 질문 키에 맞게 사용자 응답을 슬롯에 반영한다.
 def _update_slots_from_answer(question_key: str, answer_text: str, memory: Dict[str, Any]) -> None:
     if question_key == "Q_EVENT":
         set_slot(memory, "event_text", answer_text)
     elif question_key == "Q_IDEATION":
-        yn = parse_yes_no(answer_text)
-        if yn is not None:
-            set_slot(memory, "ideation", yn)
+        set_slot(memory, "ideation_resolution", "none")
+        llm_out = detect_current_ideation(answer_text)
+        label = str(llm_out.get("label", "UNCERTAIN")).upper()
+        if label == "YES":
+            set_slot(memory, "ideation", True)
+            set_slot(memory, "ideation_resolution", "llm")
+        elif label == "NO":
+            set_slot(memory, "ideation", False)
+            set_slot(memory, "ideation_resolution", "llm")
+        else:
+            # LLM이 확신하지 못하면 기존 키워드 룰로만 보조 판정
+            yn = parse_yes_no(answer_text)
+            if yn is not None:
+                set_slot(memory, "ideation", yn)
+                set_slot(memory, "ideation_resolution", "llm_fallback_rule")
+            else:
+                set_slot(memory, "ideation_resolution", "llm_uncertain")
     elif question_key == "Q_FREQ":
         val = parse_freq(answer_text)
         if val:
@@ -150,6 +167,7 @@ def _update_slots_from_answer(question_key: str, answer_text: str, memory: Dict[
             set_slot(memory, "family_suicide", yn)
 
 
+# 역할: 디버깅용 핵심 상태만 추려 compact_debug를 만든다.
 def _build_compact_debug(result: Dict[str, Any], state: Dict[str, Any], memory: Dict[str, Any]) -> Dict[str, Any]:
     sf = (result.get("대화제어", {}).get("summary_if_end", {}) or {}).get("structured_fields", {})
     checklist_hits = sf.get("checklist_hits", []) if isinstance(sf, dict) else []
@@ -167,12 +185,14 @@ def _build_compact_debug(result: Dict[str, Any], state: Dict[str, Any], memory: 
         "plan": memory.get("plan_level", ""),
         "urgency": memory.get("urgency", ""),
         "past_attempt_yes": bool(memory.get("past_attempt_yes") is True),
+        "ideation_resolution": memory.get("ideation_resolution", "none"),
         "checklist_hits": checklist_hits,
         "referral_level": sf.get("referral_level", ""),
         "end_reason": result.get("대화제어", {}).get("종료_이유", "none"),
     }
 
 
+# 역할: 한 턴 전체 처리(업데이트/점수/질문/종료요약)를 수행한다.
 def run_turn(state: Dict[str, Any], user_text: str) -> Dict[str, Any]:
     result = empty_turn()
 
@@ -206,13 +226,6 @@ def run_turn(state: Dict[str, Any], user_text: str) -> Dict[str, Any]:
         "근거": scores["rationale"],
     }
     result["모니터링"] = monitoring
-    result["단서판단"] = {
-        "signal_hit": False,
-        "signal_types": [],
-        "primary_signal_type": "INDIRECT_BEHAVIOR",
-        "evidence_phrases": [],
-        "confidence": 0.0,
-    }
 
     next_mode, next_question_key, should_end, end_reason = _route(mode, normalized_user_text, memory)
 

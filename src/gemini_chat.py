@@ -19,6 +19,7 @@ SYSTEM_PROMPT = """너는 학생의 감정을 받아주는 대화 파트너다.
 """
 
 
+# 역할: LLM 답변에서 질문문을 제거해 규칙을 강제한다.
 def _strip_questions(text: str) -> str:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     kept: List[str] = []
@@ -31,6 +32,7 @@ def _strip_questions(text: str) -> str:
     return cleaned.strip()
 
 
+# 역할: 현재 상태를 바탕으로 공감형 답변을 생성한다.
 def generate_reply(
     user_text: str,
     mode: str,

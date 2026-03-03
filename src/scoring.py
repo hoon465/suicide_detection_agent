@@ -50,11 +50,21 @@ SEVERE_EVENT_KEYWORDS: List[str] = [
     "왕따", "따돌림", "괴롭힘", "폭력", "학대", "성폭력", "가정폭력", "사망", "죽었", "퇴학", "정학", "법적", "가출", "위협", "사고", "경제위기",
 ]
 
+NO_SUBSTRINGS: List[str] = [
+    "아니", "없어", "없음", "안 들어", "안들어", "괜찮", "죽고 싶지", "죽고 싶진", "죽고싶지", "죽고싶진", "않았", "안 했", "안했", "당장은 아니",
+]
 
+YES_SUBSTRINGS: List[str] = [
+    "yes", "응", "어", "예", "맞아", "있어", "있음", "죽고 싶", "죽고싶", "들더라", "들었어", "시도한 적 있어", "있다",
+]
+
+
+# 역할: 점수를 0~100 범위로 제한한다.
 def _clamp(v: int) -> int:
     return max(0, min(100, v))
 
 
+# 역할: 고통 점수를 사람이 읽기 쉬운 단계로 변환한다.
 def _pain_state(score: int) -> str:
     if score >= 70:
         return "높음"
@@ -65,6 +75,7 @@ def _pain_state(score: int) -> str:
     return "낮음"
 
 
+# 역할: 자살 점수와 트리거로 최종 위험 상태를 결정한다.
 def _state_from_suicide_score(base_score: int, triggers: Dict[str, bool]) -> str:
     # A) risk_state는 suicide_score(base_score) 기준으로만 판정
     if base_score >= 80:
@@ -82,21 +93,25 @@ def _state_from_suicide_score(base_score: int, triggers: Dict[str, bool]) -> str
     return state
 
 
+# 역할: 자연어 응답을 예/아니오 불리언으로 파싱한다.
 def parse_yes_no(text: str) -> Optional[bool]:
     lower = text.lower().strip()
-    no_substrings = [
-        "아니", "없어", "없음", "안 들어", "안들어", "괜찮", "죽고 싶지", "죽고 싶진", "죽고싶지", "죽고싶진", "않았", "안 했", "안했", "당장은 아니",
-    ]
-    yes_substrings = [
-        "yes", "응", "어", "예", "맞아", "있어", "있음", "죽고 싶", "죽고싶", "들더라", "들었어", "시도한 적 있어", "있다",
-    ]
-    if any(s in lower for s in no_substrings):
+    if any(s in lower for s in NO_SUBSTRINGS):
         return False
-    if any(s in lower for s in yes_substrings):
+    if any(s in lower for s in YES_SUBSTRINGS):
         return True
     return None
 
 
+# 역할: 예/아니오 키워드 동시 검출 여부를 함께 반환한다.
+def parse_yes_no_with_flags(text: str) -> Tuple[Optional[bool], bool, bool]:
+    lower = text.lower().strip()
+    has_no = any(s in lower for s in NO_SUBSTRINGS)
+    has_yes = any(s in lower for s in YES_SUBSTRINGS)
+    return parse_yes_no(text), has_yes, has_no
+
+
+# 역할: 빈도 응답을 자주/가끔/거의 안으로 정규화한다.
 def parse_freq(text: str) -> str:
     lower = text.lower()
     if "자주" in lower or "자주들" in lower or "자주임" in lower or "매일" in lower or "계속" in lower:
@@ -108,6 +123,7 @@ def parse_freq(text: str) -> str:
     return ""
 
 
+# 역할: 계획 수준 응답을 A/B/C로 정규화한다.
 def parse_plan_level(text: str) -> str:
     lower = text.lower().strip()
     if "c" in lower or "구체" in lower or "계획 세워" in lower or "언제" in lower or "어디서" in lower:
@@ -119,6 +135,7 @@ def parse_plan_level(text: str) -> str:
     return ""
 
 
+# 역할: 긴급성 응답을 오늘/곧바로 또는 당장아님으로 파싱한다.
 def parse_urgency(text: str) -> str:
     lower = text.lower().strip()
     not_now_patterns = [
@@ -134,6 +151,7 @@ def parse_urgency(text: str) -> str:
     return "당장아님"
 
 
+# 역할: 과거력 응답에서 생각/시도 여부를 분리 판정한다.
 def parse_past_response(text: str) -> Tuple[bool, bool, str]:
     lower = text.lower().strip()
 
@@ -162,10 +180,7 @@ def parse_past_response(text: str) -> Tuple[bool, bool, str]:
     return False, False, "none"
 
 
-def is_end_intent(text: str) -> bool:
-    return any(k in text for k in ["고마워", "괜찮아", "이제 됐", "나갈게", "그만할게", "이제 그만"])
-
-
+# 역할: 사건 텍스트를 severe/mild/none로 분류한다.
 def classify_event_severity(event_text: str) -> str:
     if not event_text:
         return "none"
@@ -177,6 +192,7 @@ def classify_event_severity(event_text: str) -> str:
     return "mild"
 
 
+# 역할: 감정/사건 키워드로 고통 점수를 계산한다.
 def pain_score_from_text(user_text: str, event_text: str) -> Tuple[int, Dict[str, int]]:
     lower_user = user_text.lower()
     lower_event = event_text.lower()
@@ -201,6 +217,7 @@ def pain_score_from_text(user_text: str, event_text: str) -> Tuple[int, Dict[str
     return _clamp(score), breakdown
 
 
+# 역할: 문진 슬롯 기반으로 자살 신호 점수를 가중치 합산한다.
 def suicide_score_weighted(memory: Dict[str, Any], user_text: str) -> Tuple[int, Dict[str, int]]:
     score = 0
     breakdown: Dict[str, int] = {}
@@ -263,6 +280,7 @@ def suicide_score_weighted(memory: Dict[str, Any], user_text: str) -> Tuple[int,
     return _clamp(score), breakdown
 
 
+# 역할: 한 턴의 pain/suicide/risk 상태를 통합 계산한다.
 def compute_scores(
     memory: Dict[str, Any],
     user_text: str,

@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def _append(path: Path, obj) -> None:
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    print(json.dumps(obj, ensure_ascii=False))
 
 
 def _print_turn_for_user(result) -> None:
@@ -41,6 +40,7 @@ def _print_closing(result) -> None:
         print("오늘 이야기해줘서 고마워. 필요하면 언제든 다시 이어가자.")
 
 
+# 역할: CLI 인자를 받아 테스트 러너 전체 흐름을 실행한다.
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--demo", action="store_true")

@@ -7,6 +7,7 @@ ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 CTRL_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 
 
+# 역할: 입력 텍스트의 공백/제어문자 노이즈를 정규화한다.
 def normalize_text(s: str) -> str:
     text = unicodedata.normalize("NFC", s or "")
     text = ANSI_RE.sub("", text)

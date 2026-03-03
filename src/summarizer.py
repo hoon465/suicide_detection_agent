@@ -37,6 +37,7 @@ CL5_EVENT_KEYWORDS: Dict[str, List[str]] = {
 }
 
 
+# 역할: Q_EVENT 텍스트에서 CL5 키워드/카테고리 히트를 추출한다.
 def _detect_cl5_from_event(event_text: str) -> Dict[str, Any]:
     normalized = normalize_text(event_text).lower()
     categories_hit: List[str] = []
@@ -61,6 +62,7 @@ def _detect_cl5_from_event(event_text: str) -> Dict[str, Any]:
     }
 
 
+# 역할: 체크리스트 1~6 히트 여부와 의뢰 수준을 계산한다.
 def evaluate_checklist_hits(memory: Dict[str, Any], final_risk_state: str, pain_level: str, suicide_score: int) -> Dict[str, Any]:
     plan_level = str(memory.get("plan_level", ""))
     urgency = str(memory.get("urgency", ""))
@@ -138,6 +140,7 @@ def evaluate_checklist_hits(memory: Dict[str, Any], final_risk_state: str, pain_
     }
 
 
+# 역할: 종료 요약용 structured_fields를 조합한다.
 def build_structured_fields(
     memory: Dict[str, Any],
     monitoring: Dict[str, Any],
@@ -170,11 +173,13 @@ def build_structured_fields(
     }
 
 
+# 역할: 발동된 트리거 목록을 로그용 문자열로 변환한다.
 def _trigger_label(triggers: Dict[str, bool]) -> str:
     active = [k for k, v in triggers.items() if v]
     return ",".join(active) if active else "none"
 
 
+# 역할: 종료 시 내부 로그용 한 줄 요약을 생성한다.
 def build_final_one_liner(structured_fields: Dict[str, Any]) -> str:
     triggers = structured_fields.get("scoring_rationale", {}).get("triggers", {})
     return (
@@ -187,6 +192,7 @@ def build_final_one_liner(structured_fields: Dict[str, Any]) -> str:
     )
 
 
+# 역할: 구조화 요약을 자연어 3~5문장으로 변환한다.
 def natural_summary_from_structured(structured_fields: Dict[str, Any]) -> str:
     settings = load_settings()
     model = "gemini-2.5-flash-lite"

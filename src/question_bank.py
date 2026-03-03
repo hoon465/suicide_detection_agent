@@ -15,5 +15,6 @@ QUESTION_BANK: Dict[str, str] = {
 }
 
 
+# 역할: 질문 키에 대응하는 고정 질문 문구를 반환한다.
 def get_question(question_key: str) -> str:
     return QUESTION_BANK.get(question_key, "지금 가장 마음에 걸리는 게 뭐야?")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 
+# 역할: 턴별 JSON 출력의 기본 스키마를 생성한다.
 def empty_turn() -> Dict[str, Any]:
     return {
         "답변": "",
@@ -13,13 +14,6 @@ def empty_turn() -> Dict[str, Any]:
             "자살_신호_상태": "낮음",
             "risk_state": "S0",
             "근거": [],
-        },
-        "단서판단": {
-            "signal_hit": False,
-            "signal_types": [],
-            "primary_signal_type": "INDIRECT_BEHAVIOR",
-            "evidence_phrases": [],
-            "confidence": 0.0,
         },
         "행동": {
             "다음_질문": "",
@@ -47,6 +41,7 @@ def empty_turn() -> Dict[str, Any]:
             "plan": "",
             "urgency": "",
             "past_attempt_yes": False,
+            "ideation_resolution": "none",
             "checklist_hits": [],
             "referral_level": "",
             "end_reason": "none",

@@ -9,9 +9,11 @@ import src.agent as agent_mod
 from src.agent_session import AgentSession
 
 
+# 역할: 테스트 시 외부 LLM 호출을 스텁으로 대체한다.
 def _patch_offline() -> None:
     agent_mod.generate_reply = lambda **kwargs: "네 얘기 잘 들었어."
     agent_mod.detect_sentiment = lambda text: {"label": "POSITIVE" if "좋" in text else "NEGATIVE", "confidence": 0.9}
+    agent_mod.detect_current_ideation = lambda text: {"label": "UNCERTAIN", "confidence": 0.0}
     agent_mod.natural_summary_from_structured = lambda sf: "테스트 요약"
 
 
@@ -31,6 +33,7 @@ TEST_CASES: List[Dict[str, Any]] = [
 ]
 
 
+# 역할: 테스트 결과를 JSONL 파일로 저장한다.
 def _write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -38,6 +41,7 @@ def _write_jsonl(path: Path, rows: List[Dict[str, Any]]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
+# 역할: 테스트 로그를 사람이 보기 쉬운 형태로 변환한다.
 def _to_print_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for idx, row in enumerate(rows):
@@ -54,6 +58,7 @@ def _to_print_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+# 역할: 단일 테스트 케이스의 기대값 충족 여부를 검증한다.
 def _assert_case(case: Dict[str, Any], turns: List[Dict[str, Any]]) -> Tuple[bool, List[str], Dict[str, Any]]:
     last = turns[-1]
     end_reason = last.get("대화제어", {}).get("종료_이유", "none")
@@ -127,6 +132,7 @@ def _assert_case(case: Dict[str, Any], turns: List[Dict[str, Any]]) -> Tuple[boo
     return len(errors) == 0, errors, meta
 
 
+# 역할: 케이스 실행부터 검증/로그 저장까지 한 번에 수행한다.
 def run_case(case: Dict[str, Any], verbose: bool, save_jsonl: bool, save_print: bool) -> bool:
     session = AgentSession()
     rows: List[Dict[str, Any]] = [session.start_turn()]
@@ -178,11 +184,13 @@ def run_case(case: Dict[str, Any], verbose: bool, save_jsonl: bool, save_print: 
     return False
 
 
+# 역할: CLI 인자를 받아 테스트 러너 전체 흐름을 실행한다.
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--case", type=str, help="단일 케이스 실행 (예: TC02)")
     parser.add_argument("--all", action="store_true", help="전체 케이스 실행")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--offline", action="store_true", help="LLM 호출 없이 오프라인 스텁으로 테스트")
     parser.add_argument("--save-jsonl", action="store_true", default=True)
     parser.add_argument("--no-save-jsonl", action="store_true")
     parser.add_argument("--save-print", action="store_true", default=True)
@@ -191,7 +199,8 @@ def main() -> None:
 
     save_jsonl = args.save_jsonl and not args.no_save_jsonl
     save_print = args.save_print and not args.no_save_print
-    _patch_offline()
+    if args.offline:
+        _patch_offline()
 
     if args.case:
         selected = [c for c in TEST_CASES if c["id"] == args.case]
